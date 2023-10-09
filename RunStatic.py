@@ -55,6 +55,7 @@ class StaticDimensioning:
             'NO3->NO5': ('NO5', 'NO3', 'NO5->NO3'),
             'NO3->NO4': ('NO4', 'NO3', 'NO4->NO3')
         }
+        self.atc_odin = self.atc_odin.round(decimals=0)
 
     def setup_linked_vertex_sets(self):
         V_SEL = ['SE1']

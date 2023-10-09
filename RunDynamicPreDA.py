@@ -77,6 +77,7 @@ class DynamicDimensioning:
             'NO3->NO5': ('NO5', 'NO3', 'NO5->NO3'),
             'NO3->NO4': ('NO4', 'NO3', 'NO4->NO3')
         }
+        self.atc_odin = self.atc_odin.round(decimals=0)
 
     def setup_linked_vertex_sets(self):
         V_SEL = ['SE1']
@@ -233,8 +234,8 @@ class DynamicDimensioning:
                 pkl.dump(self.results, handle, protocol=pkl.HIGHEST_PROTOCOL)
 
 date_range = []
-d = datetime.strptime('2019-01-08', '%Y-%m-%d')
-for day in range(365-7):
+d = datetime.strptime('2019-01-01', '%Y-%m-%d')
+for day in range(365):
     date_range.append(datetime.strftime(d + timedelta(days=day), '%Y-%m-%d'))
 
 for d in date_range:

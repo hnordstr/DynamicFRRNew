@@ -160,6 +160,7 @@ class RIDimensioning:
             self.setup_chance_up()
             self.setup_chance_down()
             self.gm.setParam('MIPGap', 0)
+            self.gm.setParam('NumericFocus', 1)
 
         def setup_objective(self):
             self.obj = sum(self.VAR_RESERVECAPUP[a] + self.VAR_RESERVECAPDOWN[a] for a in self.SET_AREAS)
