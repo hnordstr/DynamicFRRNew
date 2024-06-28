@@ -266,8 +266,8 @@ class FRRNIDimensioning:
             self.PARAM_ATCPOS = atc_pos
             self.PARAM_ATCNEG = atc_neg
             self.PARAM_IMBALANCE = imbalance
-            self.PARAM_RESERVEUPTOT = reserve_up
-            self.PARAM_RESERVEDOWNTOT = reserve_down
+            self.PARAM_RESERVEUP = reserve_up
+            self.PARAM_RESERVEDOWN = reserve_down
             self.PARAM_BINARYPOS = binary_pos
             self.PARAM_BINARYNEG = binary_neg
             self.PARAM_CAPUP = capup
@@ -297,11 +297,6 @@ class FRRNIDimensioning:
             self.SET_ACLINKS = self.ac_links.keys()
             self.SET_SCENARIOS = list(range(self.PARAM_IMBALANCE.__len__()))
 
-            self.VAR_RESERVECAPUP = self.gm.addVars(self.SET_AREAS, name='reservecapacityup', vtype=GRB.CONTINUOUS,
-                                                    lb=0, ub=float('inf'))
-            self.VAR_RESERVECAPDOWN = self.gm.addVars(self.SET_AREAS, name='reservecapacitydown',
-                                                      vtype=GRB.CONTINUOUS,
-                                                      lb=0, ub=float('inf'))
             self.VAR_TRANSMISSIONPOS = self.gm.addVars(self.SET_ACLINKS, self.SET_SCENARIOS, name='transmissionpos',
                                                        vtype=GRB.CONTINUOUS, lb=0, ub=float('inf'))
             self.VAR_TRANSMISSIONNEG = self.gm.addVars(self.SET_ACLINKS, self.SET_SCENARIOS, name='transmissionneg',
@@ -317,18 +312,14 @@ class FRRNIDimensioning:
 
             print('SETTING UP LP PROBLEM')
             self.setup_objective()
-            self.setup_minimum_reserve_up()
-            self.setup_minimum_reserve_down()
             self.setup_transmission_pos()
             self.setup_transmission_neg()
             self.setup_power_balance()
             self.setup_activation_up()
             self.setup_activation_down()
-            self.setup_unserved_pos()
-            self.setup_unserved_neg()
-            self.setup_reserve_up()
-            self.setup_reserve_down()
-            self.gm.setParam('FeasibilityTol', 10 ** (-2))
+            #self.setup_unserved_pos()
+            #self.setup_unserved_neg()
+            #self.gm.setParam('FeasibilityTol', 10 ** (-2))
 
         def setup_objective(self):
             self.obj = sum(self.VAR_UNSERVEDPOS[a, i] + self.VAR_UNSERVEDNEG[a, i] for a in self.SET_AREAS for i in
@@ -337,30 +328,6 @@ class FRRNIDimensioning:
                 self.VAR_TRANSMISSIONPOS[l, i] + self.VAR_TRANSMISSIONNEG[l, i] for l in self.SET_ACLINKS for i in
                 self.SET_SCENARIOS)
             self.gm.setObjective(self.obj, sense=GRB.MINIMIZE)
-
-        def setup_minimum_reserve_up(self):
-            self.CONSTR_MIN_RESERVE_UP = {}
-            for a in self.SET_AREAS:
-                left_hand = self.VAR_RESERVECAPUP[a]
-                right_hand = self.PARAM_CAPUP[a]
-                self.CONSTR_MIN_RESERVE_UP[a] = self.gm.addLConstr(
-                    lhs=left_hand,
-                    sense=GRB.GREATER_EQUAL,
-                    rhs=right_hand,
-                    name=f'MINRESERVEUP[{a}]'
-                )
-
-        def setup_minimum_reserve_down(self):
-            self.CONSTR_MIN_RESERVE_DOWN = {}
-            for a in self.SET_AREAS:
-                left_hand = self.VAR_RESERVECAPDOWN[a]
-                right_hand = self.PARAM_CAPDOWN[a]
-                self.CONSTR_MIN_RESERVE_DOWN[a] = self.gm.addLConstr(
-                    lhs=left_hand,
-                    sense=GRB.GREATER_EQUAL,
-                    rhs=right_hand,
-                    name=f'MINRESERVEDOWN[{a}]'
-                )
 
         def setup_transmission_pos(self):
             self.CONSTR_TRANSMISSIONPOS = {}
@@ -393,7 +360,7 @@ class FRRNIDimensioning:
             for a in self.SET_AREAS:
                 for i in self.SET_SCENARIOS:
                     left_hand = self.VAR_ACTIVATIONUP[a, i]
-                    right_hand = self.VAR_RESERVECAPUP[a]
+                    right_hand = self.PARAM_RESERVEUP[a]
                     self.CONSTR_ACTIVATIONUP[a, i] = self.gm.addLConstr(
                         lhs=left_hand,
                         sense=GRB.LESS_EQUAL,
@@ -406,7 +373,7 @@ class FRRNIDimensioning:
             for a in self.SET_AREAS:
                 for i in self.SET_SCENARIOS:
                     left_hand = self.VAR_ACTIVATIONDOWN[a, i]
-                    right_hand = self.VAR_RESERVECAPDOWN[a]
+                    right_hand = self.PARAM_RESERVEDOWN[a]
                     self.CONSTR_ACTIVATIONDOWN[a, i] = self.gm.addLConstr(
                         lhs=left_hand,
                         sense=GRB.LESS_EQUAL,
@@ -465,25 +432,6 @@ class FRRNIDimensioning:
                         name=f'POWERBALANCE[{a, i}]'
                     )
 
-        def setup_reserve_up(self):
-            left_hand = sum(self.VAR_RESERVECAPUP[a] for a in self.SET_AREAS)
-            right_hand = self.PARAM_RESERVEUPTOT
-            self.CONSTR_RESERVEUP = self.gm.addLConstr(
-                lhs=left_hand,
-                sense=GRB.LESS_EQUAL,
-                rhs=right_hand,
-                name=f'RESERVEUP'
-            )
-
-        def setup_reserve_down(self):
-            left_hand = sum(self.VAR_RESERVECAPDOWN[a] for a in self.SET_AREAS)
-            right_hand = self.PARAM_RESERVEDOWNTOT
-            self.CONSTR_RESERVEDOWN = self.gm.addLConstr(
-                lhs=left_hand,
-                sense=GRB.LESS_EQUAL,
-                rhs=right_hand,
-                name=f'RESERVEDOWN'
-            )
 
     def run(self):
         m = self.MIP(imbalances=self.imbalances, atc_pos=self.atc_pos, atc_neg=self.atc_neg, capup=self.capup,
@@ -493,8 +441,11 @@ class FRRNIDimensioning:
         m.gm.optimize()
         et_tot = time.time()
         print(f'SOLVED FIRST PROBLEM IN {round(et_tot - st_tot, 0)} SECONDS')
-        reserve_up = sum(m.VAR_RESERVECAPUP[a].X for a in m.SET_AREAS)
-        reserve_down = sum(m.VAR_RESERVECAPDOWN[a].X for a in m.SET_AREAS)
+        reserve_up = {}
+        reserve_down = {}
+        for a in m.SET_AREAS:
+            reserve_up[a] = m.VAR_RESERVECAPUP[a].X
+            reserve_down[a] = m.VAR_RESERVECAPDOWN[a].X
         binary_pos = [m.VAR_VIOLATION_POS[i].X for i in m.SET_SCENARIOS]
         binary_neg = [m.VAR_VIOLATION_NEG[i].X for i in m.SET_SCENARIOS]
         st_tot2 = time.time()
@@ -506,17 +457,17 @@ class FRRNIDimensioning:
         et_tot2 = time.time()
         print(f'SOLVED SECOND PROBLEM IN {round(et_tot2 - st_tot2, 0)} SECONDS')
 
-        for a in m.SET_AREAS:
-           print(f'PRE UPWARD CAPACITY {a}: {round(m.VAR_RESERVECAPUP[a].X, 1)} MW')
-           print(f'POST UPWARD CAPACITY {a}: {round(m2.VAR_RESERVECAPUP[a].X, 1)} MW')
-           print(f'PRE DOWNWARD CAPACITY {a}: {round(m.VAR_RESERVECAPDOWN[a].X, 1)} MW')
-           print(f'POST DOWNWARD CAPACITY {a}: {round(m2.VAR_RESERVECAPDOWN[a].X, 1)} MW')
+        # for a in m.SET_AREAS:
+        #    print(f'PRE UPWARD CAPACITY {a}: {round(m.VAR_RESERVECAPUP[a].X, 1)} MW')
+        #    print(f'POST UPWARD CAPACITY {a}: {round(m2.VAR_RESERVECAPUP[a].X, 1)} MW')
+        #    print(f'PRE DOWNWARD CAPACITY {a}: {round(m.VAR_RESERVECAPDOWN[a].X, 1)} MW')
+        #    print(f'POST DOWNWARD CAPACITY {a}: {round(m2.VAR_RESERVECAPDOWN[a].X, 1)} MW')
 
         #print('\n')
         #print(f'PRE TOTAL UPWARD CAPACITY: {round(sum(m.VAR_RESERVECAPUP[a].X for a in m.SET_AREAS), 1)} MW')
-        print(f'TOTAL UPWARD CAPACITY: {round(sum(m2.VAR_RESERVECAPUP[a].X for a in m.SET_AREAS), 1)} MW')
+        print(f'TOTAL UPWARD CAPACITY: {round(sum(m.VAR_RESERVECAPUP[a].X for a in m.SET_AREAS), 1)} MW')
         #print(f'PRE TOTAL DOWNWARD CAPACITY: {round(sum(m.VAR_RESERVECAPDOWN[a].X for a in m.SET_AREAS), 1)} MW')
-        print(f'TOTAL DOWNWARD CAPACITY: {round(sum(m2.VAR_RESERVECAPDOWN[a].X for a in m.SET_AREAS), 1)} MW')
+        print(f'TOTAL DOWNWARD CAPACITY: {round(sum(m.VAR_RESERVECAPDOWN[a].X for a in m.SET_AREAS), 1)} MW')
         print(f'UPWARD RELIABILITY: {round(100 - 100 * sum(m.VAR_VIOLATION_POS[i].X for i in m.SET_SCENARIOS) / m.SET_SCENARIOS.__len__(), 2)} %')
         print(f'DOWNWARD RELIABILITY: {round(100 - 100 * sum(m.VAR_VIOLATION_NEG[i].X for i in m.SET_SCENARIOS) / m.SET_SCENARIOS.__len__(), 2)} %')
 
@@ -537,8 +488,8 @@ class FRRNIDimensioning:
             self.results['Down activation'][a] = [m2.VAR_ACTIVATIONDOWN[a, w].X for w in m2.SET_SCENARIOS]
             self.results['Unserved up'][a] = [m2.VAR_UNSERVEDPOS[a, w].X for w in m2.SET_SCENARIOS]
             self.results['Unserved down'][a] = [m2.VAR_UNSERVEDNEG[a, w].X for w in m2.SET_SCENARIOS]
-            self.results['Up capacity'][a][0] = m2.VAR_RESERVECAPUP[a].X
-            self.results['Down capacity'][a][0] = m2.VAR_RESERVECAPDOWN[a].X
+            self.results['Up capacity'][a][0] = m.VAR_RESERVECAPUP[a].X
+            self.results['Down capacity'][a][0] = m.VAR_RESERVECAPDOWN[a].X
         for l in m2.SET_ACLINKS:
             self.results['Transmission'][l] = [m2.VAR_TRANSMISSIONPOS[l, w].X - m2.VAR_TRANSMISSIONNEG[l,w].X
                                                for w in m2.SET_SCENARIOS]

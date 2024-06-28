@@ -230,14 +230,15 @@ class DynamicDimensioning:
             'Time': et_time - st_time
         }
         if self.save:
-            with open(f'{self.result_path}Day_{datetime.strftime(self.date, "%Y-%m-%d")}_Scenarios_{self.num_scenarios}.pickle', 'wb') as handle:
+            with open(f'{self.result_path}Day_{datetime.strftime(self.date, "%Y-%m-%d")}_Scenarios_{self.num_scenarios}_Epsilon_{self.epsilon}.pickle', 'wb') as handle:
                 pkl.dump(self.results, handle, protocol=pkl.HIGHEST_PROTOCOL)
+
 
 date_range = []
 d = datetime.strptime('2019-01-01', '%Y-%m-%d')
-for day in range(365):
+for day in range(31):
     date_range.append(datetime.strftime(d + timedelta(days=day), '%Y-%m-%d'))
 
 for d in date_range:
-    m = DynamicDimensioning(date=d, save=True, num_scenarios=20)
+    m = DynamicDimensioning(date=d, save=False, num_scenarios=20, epsilon=0.01)
     m.run()

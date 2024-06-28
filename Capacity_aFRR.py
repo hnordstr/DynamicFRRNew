@@ -115,7 +115,7 @@ class aFRRNIDimensioning:
             self.setup_chance_up()
             self.setup_chance_down()
             self.gm.setParam('MIPGap', 0)
-            self.gm.setParam('NumericFocus', 1)
+            self.gm.setParam('NumericFocus', 3)
 
         def setup_objective(self):
             self.obj = sum(self.VAR_RESERVECAPUP[a] + self.VAR_RESERVECAPDOWN[a] for a in self.SET_AREAS)
@@ -284,6 +284,7 @@ class aFRRNIDimensioning:
             self.setup_unserved_neg()
             self.setup_reserve_up()
             self.setup_reserve_down()
+            self.gm.setParam('FeasibilityTol', 10**(-2))
 
         def setup_objective(self):
             self.obj = sum(self.VAR_UNSERVEDPOS[a, i] + self.VAR_UNSERVEDNEG[a, i] for a in self.SET_AREAS for i in

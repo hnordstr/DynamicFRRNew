@@ -212,7 +212,7 @@ class StaticDimensioning:
                 pkl.dump(self.results, handle, protocol=pkl.HIGHEST_PROTOCOL)
 
 
-m = StaticDimensioning(num_days=365, save=True, epsilon=0.01)
+m = StaticDimensioning(num_days=365, save=True, epsilon=0.05)
 m.run()
 
 

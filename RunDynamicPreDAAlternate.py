@@ -1,17 +1,19 @@
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import time
 import math
-from RIDimensioningDynamic import RIDimensioning
-from ImbalanceNettingPostDA import GurobiModel as ImbalanceNetting
+from RIDimensioningDynamicAlternate import RIDimensioning
+from ImbalanceNettingPreDA import GurobiModel as ImbalanceNetting
 from MinuteToQuarter import minute_to_quarter as ImbalanceSampling
-from Capacity_total_FRR import FRRNIDimensioning
-from Capacity_aFRR import aFRRNIDimensioning
+from Capacity_total_FRR_alternate import FRRNIDimensioning
+from Capacity_aFRR_alternate import aFRRNIDimensioning
+import matplotlib.pyplot as plt
 import pickle as pkl
 import random
 #import os
+
+
 
 
 # begin with 3 months
@@ -27,27 +29,36 @@ import random
 
 class DynamicDimensioning:
 
-    def __init__(self, date='2019-01-01', num_scenarios=30, save=False, epsilon=0.01):
+    def __init__(self, date='2019-01-01', num_scenarios=15, save=False, atc_av=1, epsilon=0.01):
+        self.atc_av = atc_av
         self.save = save
-        self.epsilon =epsilon
         self.areas = ('SE1', 'SE2', 'SE3', 'SE4', 'NO1', 'NO2', 'NO3', 'NO4', 'NO5', 'DK2', 'FI')
         self.data_path = 'C:\\Users\\hnordstr\\OneDrive - KTH\\box_files\\KTH\\Papers&Projects\\DynamicFRR\\Normal Imbalances\\Scenario1\\'
-        self.result_path = f'C:\\Users\\hnordstr\\OneDrive - KTH\\box_files\\KTH\\Papers&Projects\\DynamicFRR\\Results\\DynamicPostDA\\'
+        self.result_path = f'C:\\Users\\hnordstr\\OneDrive - KTH\\box_files\\KTH\\Papers&Projects\\DynamicFRR\\Results\\DynamicPreDA\\'
         self.date = datetime.strptime(date, '%Y-%m-%d')
-        self.date_str = date
         self.dates_available = [datetime.strptime('2019-01-01', '%Y-%m-%d') + timedelta(days=x) for x in range(365)]
         self.atc_odin = pd.read_csv(f'{self.data_path}ATC_ODIN.csv', index_col=[0])
         self.num_scenarios = num_scenarios
+        self.epsilon = epsilon
+        self.dates = []
+        # Takes num_scenarios previous days. If early january then takes december days
+        for n in range(1, self.num_scenarios + 1):
+            if self.date - timedelta(days=n) in self.dates_available:
+                self.dates.append(self.date - timedelta(days=n))
+            else:
+                self.dates.append(self.date + timedelta(days=365 - n))
         self.hour_time = []
         self.minute_time = []
-        self.hour_time.extend([self.date + timedelta(hours=x) for x in range(24)])
-        self.minute_time.extend([self.date + timedelta(minutes=x) for x in range(24 * 60)])
+        for d in self.dates:
+            self.hour_time.extend([d + timedelta(hours=x) for x in range(24)])
+            self.minute_time.extend([d + timedelta(minutes=x) for x in range(24 * 60)])
         self.hour_time.sort()
         self.minute_time.sort()
         self.hour_time_str = [datetime.strftime(h, '%Y-%m-%d %H:%M:%S+00:00') for h in self.hour_time]
         self.minute_time_str = [datetime.strftime(m, '%Y-%m-%d %H:%M:%S+00:00') for m in self.minute_time]
         self.atc_odin = self.atc_odin[self.atc_odin.index.isin(self.hour_time_str)]
         self.atc_odin.reset_index(drop=True, inplace=True)
+        self.atc_odin = self.atc_odin * self.atc_av
         self.ac_index = self.atc_odin.columns.tolist()
         self.ac_links = {
             'SE1->SE2': ('SE2', 'SE1', 'SE2->SE1'),
@@ -143,10 +154,10 @@ class DynamicDimensioning:
         for c in atc_neg.columns.tolist():
             atc_neg.loc[atc_neg[c] < 0, c] = 0
         self.netting_results = {}
-        self.netting_results['Stochastic imbalances'], self.netting_results['Deterministic imbalances'], \
+        self.netting_results['Stochastic imbalances'], self.netting_results['Deterministic imbalances'],\
         self.netting_results['Netted imbalances'], self.netting_results['ATC positive'],\
-        self.netting_results['ATC negative'], self.netting_results['Transmission'] = \
-            ImbalanceNetting(date=self.date_str, atc_pos=atc_pos, atc_neg=atc_neg, scenarios=self.num_scenarios).run()
+        self.netting_results['ATC negative'], self.netting_results['Transmission'] =\
+            ImbalanceNetting(date=self.date, atc_pos=atc_pos, atc_neg=atc_neg, time=self.hour_time).run()
         et = time.time()
         print(f'Imbalance netting done in {et - st} seconds')
 
@@ -159,7 +170,7 @@ class DynamicDimensioning:
             atc_neg = self.netting_results['ATC negative']
         self.sampling_results = {}
         self.sampling_results['Slow imbalances'], self.sampling_results['Fast imbalances'], \
-        self.sampling_results['ATC positive'], self.sampling_results['ATC negative']= \
+        self.sampling_results['ATC positive'], self.sampling_results['ATC negative'] =\
             ImbalanceSampling(imbalance=imbalances, atc_pos_in=atc_pos, atc_neg_in=atc_neg)
         et = time.time()
         print(f'Imbalance sampling done in {et - st} seconds')
@@ -219,14 +230,15 @@ class DynamicDimensioning:
             'Time': et_time - st_time
         }
         if self.save:
-            with open(f'{self.result_path}Day_{datetime.strftime(self.date, "%Y-%m-%d")}_Scenarios_{self.num_scenarios}.pickle', 'wb') as handle:
+            with open(f'{self.result_path}Day_{datetime.strftime(self.date, "%Y-%m-%d")}_Scenarios_{self.num_scenarios}_Alternate.pickle', 'wb') as handle:
                 pkl.dump(self.results, handle, protocol=pkl.HIGHEST_PROTOCOL)
+
 
 date_range = []
 d = datetime.strptime('2019-01-01', '%Y-%m-%d')
-for day in range(1):
+for day in range(31):
     date_range.append(datetime.strftime(d + timedelta(days=day), '%Y-%m-%d'))
 
 for d in date_range:
-    m = DynamicDimensioning(date=d, save=True, num_scenarios=20)
+    m = DynamicDimensioning(date=d, save=True, num_scenarios=20, epsilon=0.01)
     m.run()
